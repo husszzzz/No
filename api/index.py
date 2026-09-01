@@ -4,11 +4,11 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # توكن حسابك في جيت هب (PAT)
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") 
 REPO_OWNER = os.getenv("REPO_OWNER", "husszzzz")
-REPO_NAME = os.getenv("REPO_NAME", "special-octo-engine")
+# غيرنا هذا السطر حتى يتأكد انه المستودع No حرف كبير
+REPO_NAME = os.getenv("REPO_NAME", "No") 
 
-# حفظ مؤقت للملفات بالذاكرة (يجب إرسال الملفات بشكل متتالي وبدون تأخير طويل)
 sessions = {}
 
 def send_message(chat_id, text):
@@ -33,7 +33,10 @@ def trigger_github_action(p12_path, prov_path, password, chat_id):
             "chat_id": str(chat_id)
         }
     }
-    requests.post(url, headers=headers, json=data)
+    # هنا ضفنا كود كشف الأخطاء
+    res = requests.post(url, headers=headers, json=data)
+    if res.status_code != 204:
+        send_message(chat_id, f"❌ فشل تشغيل الأكشن في GitHub!\nرمز الخطأ: {res.status_code}\nالسبب: {res.text}")
 
 @app.route('/api', methods=['POST', 'GET'])
 def webhook():
@@ -54,11 +57,10 @@ def webhook():
             sessions[chat_id] = {}
             send_message(chat_id, "👋 أهلاً بك! أرسل ملف الشهادة `.p12` أولاً:")
         elif "p12_path" in sessions[chat_id] and "prov_path" in sessions[chat_id] and "password" not in sessions[chat_id]:
-            # استلام الباسورد وبدء العملية
             sessions[chat_id]["password"] = text
-            send_message(chat_id, "⚙️ تم استلام البيانات! جاري تشغيل سيرفرات GitHub للتوقيع (قد يستغرق الأمر دقيقتين)، سيصلك رابط التثبيت قريباً...")
+            send_message(chat_id, "⚙️ تم استلام البيانات! جاري إرسال الأمر لسيرفرات GitHub...")
             trigger_github_action(sessions[chat_id]["p12_path"], sessions[chat_id]["prov_path"], text, chat_id)
-            sessions[chat_id] = {} # تفريغ الجلسة
+            sessions[chat_id] = {} 
 
     elif "document" in update["message"]:
         doc = update["message"]["document"]
