@@ -31,7 +31,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           P12_PATH: ${{ github.event.inputs.p12_path }}
           PROV_PATH: ${{ github.event.inputs.prov_path }}
-          GAME_URL: "ضع_رابط_اللعبة_المباشر_هنا" 
+          GAME_URL: "https://github.com/husszzzz/8ball-pool/releases/download/1.5/8.Ball.Pool_56.26.1_1787089904.ipa" 
         run: |
           curl -s -L "https://api.telegram.org/file/bot${BOT_TOKEN}/${P12_PATH}" -o cert.p12
           curl -s -L "https://api.telegram.org/file/bot${BOT_TOKEN}/${PROV_PATH}" -o cert.mobileprovision
