@@ -18,12 +18,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Setup zsign
+      - name: Setup zsign (Updated)
         run: |
-          sudo apt-get update && sudo apt-get install -y g++ libssl-dev zip unzip curl
+          sudo apt-get update && sudo apt-get install -y zip unzip curl libssl-dev cmake g++
           git clone https://github.com/zhlynn/zsign.git
           cd zsign
-          g++ *.cpp common/*.cpp -lcrypto -lssl -O3 -o zsign
+          mkdir build && cd build
+          cmake ..
+          make
           sudo mv zsign /usr/local/bin/
 
       - name: Download Files
@@ -62,14 +64,12 @@ jobs:
           
           mkdir -p install_$CHAT_ID
           
-          # إنشاء ملف Plist
           cat <<EOF > install_$CHAT_ID/manifest.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${{ env.IPA_URL }}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>com.hassanystore.game</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>Signed by Hassany</string></dict></dict></array></dict></plist>
           EOF
           
-          # إنشاء صفحة التثبيت HTML
           cat <<EOF > install_$CHAT_ID/index.html
           <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تثبيت اللعبة</title></head><body style="text-align: center; font-family: sans-serif; margin-top: 50px;"><h2>تم التوقيع بنجاح 🚀</h2><a href="itms-services://?action=download-manifest&url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_$CHAT_ID/manifest.plist" style="display:inline-block; padding: 15px 30px; background: #007aff; color: white; text-decoration: none; border-radius: 10px; font-size: 18px;">تثبيت الآن</a></body></html>
           EOF
