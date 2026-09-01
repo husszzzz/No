@@ -1,98 +1,75 @@
-from flask import Flask, request, jsonify
-import requests
-import json
-import base64
 import os
+import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-
-# جلب المتغيرات من بيئة Vercel
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # توكن حسابك في جيت هب (PAT)
 REPO_OWNER = os.getenv("REPO_OWNER", "husszzzz")
 REPO_NAME = os.getenv("REPO_NAME", "special-octo-engine")
-FILE_PATH = "data.json"
 
-TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+# حفظ مؤقت للملفات بالذاكرة (يجب إرسال الملفات بشكل متتالي وبدون تأخير طويل)
+sessions = {}
 
-# 1. دالة لقراءة ملف JSON من GitHub API
-def get_github_json():
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+def send_message(chat_id, text):
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text})
+
+def get_file_path(file_id):
+    res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
+    return res['result']['file_path']
+
+def trigger_github_action(p12_path, prov_path, password, chat_id):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/sign.yml/dispatches"
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    res = requests.get(url, headers=headers)
-    if res.status_code == 200:
-        content = res.json()
-        sha = content['sha']  # مطلوب للتعديل لاحقاً
-        decoded = base64.b64decode(content['content']).decode('utf-8')
-        return json.loads(decoded), sha
-    return {}, None
-
-# 2. دالة لتحديث وتعديل ملف JSON على GitHub API
-def update_github_json(data, sha, commit_message="تحديث البيانات بواسطة البوت"):
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
-    headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+    data = {
+        "ref": "main",
+        "inputs": {
+            "p12_path": p12_path,
+            "prov_path": prov_path,
+            "password": password,
+            "chat_id": str(chat_id)
+        }
     }
-    
-    content_str = json.dumps(data, ensure_ascii=False, indent=2)
-    encoded = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
-    
-    payload = {
-        "message": commit_message,
-        "content": encoded,
-        "sha": sha
-    }
-    res = requests.put(url, headers=headers, json=payload)
-    return res.status_code == 200
+    requests.post(url, headers=headers, json=data)
 
-# 3. دالة لإرسال رسالة لتليجرام
-def send_telegram_message(chat_id, text):
-    requests.post(f"{TELEGRAM_API}/sendMessage", json={
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    })
-
-# نقطة الـ Webhook التي يستدعيها تليجرام
-@app.route('/', methods=['POST', 'GET'])
 @app.route('/api', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'GET':
-        return "البوت يعمل بنجاح!"
+        return "Vercel Bot is Running!"
 
     update = request.get_json()
     if not update or "message" not in update:
         return jsonify({"status": "ok"})
-    
-    message = update["message"]
-    chat_id = message["chat"]["id"]
-    text = message.get("text", "")
 
-    # الأوامر
-    if text == "/start":
-        send_telegram_message(chat_id, "👋 أهلاً بك! البوت يعمل 24/7 عبر Vercel ويقوم بالحفظ في GitHub مباشرة.")
+    chat_id = update["message"]["chat"]["id"]
+    if chat_id not in sessions:
+        sessions[chat_id] = {}
 
-    # مثال على التعديل والحفظ في ملف JSON
-    elif text.startswith("/save "):
-        new_value = text.replace("/save ", "").strip()
-        data, sha = get_github_json()
-        
-        # إضافة أو تعديل قيمة
-        data["last_message"] = new_value
-        
-        if update_github_json(data, sha, f"Bot Update: {new_value}"):
-            send_telegram_message(chat_id, f"✅ تم حفظ القيمة بنجاح في `data.json` على GitHub:\n`{new_value}`")
-        else:
-            send_telegram_message(chat_id, "❌ حدث خطأ أثناء التحديث على GitHub.")
+    if "text" in update["message"]:
+        text = update["message"]["text"]
+        if text == "/start":
+            sessions[chat_id] = {}
+            send_message(chat_id, "👋 أهلاً بك! أرسل ملف الشهادة `.p12` أولاً:")
+        elif "p12_path" in sessions[chat_id] and "prov_path" in sessions[chat_id] and "password" not in sessions[chat_id]:
+            # استلام الباسورد وبدء العملية
+            sessions[chat_id]["password"] = text
+            send_message(chat_id, "⚙️ تم استلام البيانات! جاري تشغيل سيرفرات GitHub للتوقيع (قد يستغرق الأمر دقيقتين)، سيصلك رابط التثبيت قريباً...")
+            trigger_github_action(sessions[chat_id]["p12_path"], sessions[chat_id]["prov_path"], text, chat_id)
+            sessions[chat_id] = {} # تفريغ الجلسة
 
-    # قراءة البيانات المحفوظة
-    elif text == "/read":
-        data, _ = get_github_json()
-        val = data.get("last_message", "لا توجد بيانات محفوظة بعد.")
-        send_telegram_message(chat_id, f"📄 القيمة المحفوظة حالياً في JSON:\n`{val}`")
+    elif "document" in update["message"]:
+        doc = update["message"]["document"]
+        file_name = doc.get("file_name", "")
+        file_id = doc["file_id"]
+
+        if file_name.endswith(".p12"):
+            sessions[chat_id]["p12_path"] = get_file_path(file_id)
+            send_message(chat_id, "✅ تم استلام الشهادة. أرسل الآن ملف `.mobileprovision`:")
+        elif file_name.endswith(".mobileprovision"):
+            sessions[chat_id]["prov_path"] = get_file_path(file_id)
+            send_message(chat_id, "🔐 أرسل كلمة مرور الشهادة:")
 
     return jsonify({"status": "ok"})
