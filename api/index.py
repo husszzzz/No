@@ -5,10 +5,8 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") 
-REPO_OWNER = os.getenv("REPO_OWNER", "husszzzz")
-# غيرنا هذا السطر حتى يتأكد انه المستودع No حرف كبير
-REPO_NAME = os.getenv("REPO_NAME", "No") 
-
+REPO_OWNER = "husszzzz"
+REPO_NAME = "No"
 sessions = {}
 
 def send_message(chat_id, text):
