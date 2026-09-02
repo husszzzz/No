@@ -6,12 +6,15 @@ on:
       p12_path:
         required: true
         type: string
+
       prov_path:
         required: true
         type: string
+
       password:
         required: true
         type: string
+
       chat_id:
         required: true
         type: string
@@ -24,12 +27,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
+
       - name: Setup zsign
         run: |
+          set -e
+
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             g++ \
@@ -41,15 +49,24 @@ jobs:
             curl
 
           rm -rf /tmp/zsign
-          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+
+          git clone --depth 1 \
+            https://github.com/zhlynn/zsign.git \
+            /tmp/zsign
 
           cd /tmp/zsign/build/linux
-          make clean
+
+          make clean || true
           make
 
-          sudo install -m 755 zsign /usr/local/bin/zsign
+          sudo install -m 755 \
+            /tmp/zsign/bin/zsign \
+            /usr/local/bin/zsign
 
-          zsign --version || zsign -h
+          echo "Testing zsign..."
+
+          /usr/local/bin/zsign -h
+
 
       - name: Download Files
         env:
@@ -57,30 +74,47 @@ jobs:
           P12_PATH: ${{ github.event.inputs.p12_path }}
           PROV_PATH: ${{ github.event.inputs.prov_path }}
           GAME_URL: "https://github.com/husszzzz/8ball-pool/releases/download/1.5/8.Ball.Pool_56.26.1_1787089904.ipa"
+
         run: |
           set -e
+
+          echo "Downloading certificate..."
 
           curl -f -sSL \
             "https://api.telegram.org/file/bot${BOT_TOKEN}/${P12_PATH}" \
             -o cert.p12
 
+          echo "Downloading provision..."
+
           curl -f -sSL \
             "https://api.telegram.org/file/bot${BOT_TOKEN}/${PROV_PATH}" \
             -o cert.mobileprovision
+
+          echo "Downloading IPA..."
 
           curl -f -sSL \
             "$GAME_URL" \
             -o game.ipa
 
+          echo "Checking files..."
+
           test -s cert.p12
           test -s cert.mobileprovision
           test -s game.ipa
 
+          ls -lh cert.p12
+          ls -lh cert.mobileprovision
+          ls -lh game.ipa
+
+
       - name: Sign IPA
         env:
           PASSWORD: ${{ github.event.inputs.password }}
+
         run: |
           set -e
+
+          echo "Signing IPA..."
 
           zsign \
             -k cert.p12 \
@@ -91,13 +125,21 @@ jobs:
 
           test -s signed.ipa
 
+          echo "Signed successfully!"
+
+          ls -lh signed.ipa
+
+
       - name: Upload to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         run: |
           set -e
 
           TAG="ota-${{ github.event.inputs.chat_id }}-$(date +%s)"
+
+          echo "Creating release..."
 
           gh release create "$TAG" \
             signed.ipa \
@@ -108,9 +150,14 @@ jobs:
 
           echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
 
+          echo "IPA URL:"
+          echo "$IPA_URL"
+
+
       - name: Generate OTA HTML and Plist
         env:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
+
         run: |
           set -e
 
@@ -121,65 +168,114 @@ jobs:
 
           mkdir -p "install_${CHAT_ID}"
 
+
           cat > "install_${CHAT_ID}/manifest.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
           <plist version="1.0">
+
           <dict>
-            <key>items</key>
-            <array>
-              <dict>
-                <key>assets</key>
-                <array>
-                  <dict>
-                    <key>kind</key>
-                    <string>software-package</string>
-                    <key>url</key>
-                    <string>${IPA_URL}</string>
-                  </dict>
-                </array>
 
-                <key>metadata</key>
-                <dict>
-                  <key>bundle-identifier</key>
-                  <string>com.hassanystore.game</string>
+          <key>items</key>
 
-                  <key>bundle-version</key>
-                  <string>1.0</string>
+          <array>
 
-                  <key>kind</key>
-                  <string>software</string>
+          <dict>
 
-                  <key>title</key>
-                  <string>Signed by Hassany</string>
-                </dict>
-              </dict>
-            </array>
+          <key>assets</key>
+
+          <array>
+
+          <dict>
+
+          <key>kind</key>
+
+          <string>software-package</string>
+
+          <key>url</key>
+
+          <string>${IPA_URL}</string>
+
           </dict>
+
+          </array>
+
+
+          <key>metadata</key>
+
+          <dict>
+
+          <key>bundle-identifier</key>
+
+          <string>com.hassanystore.game</string>
+
+
+          <key>bundle-version</key>
+
+          <string>1.0</string>
+
+
+          <key>kind</key>
+
+          <string>software</string>
+
+
+          <key>title</key>
+
+          <string>Signed by Hassany</string>
+
+          </dict>
+
+          </dict>
+
+          </array>
+
+          </dict>
+
           </plist>
           EOF
 
+
           cat > "install_${CHAT_ID}/index.html" <<EOF
           <!DOCTYPE html>
+
           <html lang="ar" dir="rtl">
+
           <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>تثبيت اللعبة</title>
+
+          <meta charset="utf-8">
+
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+          <title>تثبيت اللعبة</title>
+
           </head>
 
-          <body style="text-align:center;font-family:sans-serif;margin-top:50px;">
-            <h2>تم التوقيع بنجاح 🚀</h2>
 
-            <a
-              href="itms-services://?action=download-manifest&url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/manifest.plist"
-              style="display:inline-block;padding:15px 30px;background:#007aff;color:white;text-decoration:none;border-radius:10px;font-size:18px;"
-            >
-              تثبيت الآن
-            </a>
+          <body style="text-align:center;font-family:sans-serif;margin-top:50px;">
+
+          <h2>تم التوقيع بنجاح 🚀</h2>
+
+
+          <a
+
+          href="itms-services://?action=download-manifest&url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/manifest.plist"
+
+          style="display:inline-block;padding:15px 30px;background:#007aff;color:white;text-decoration:none;border-radius:10px;font-size:18px;"
+
+          >
+
+          تثبيت الآن
+
+          </a>
+
+
           </body>
+
           </html>
           EOF
+
 
           git add "install_${CHAT_ID}/"
 
@@ -187,11 +283,15 @@ jobs:
 
           git push -f origin gh-pages
 
+
       - name: Send Telegram Message
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
+
         run: |
+          set -e
+
           INSTALL_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/index.html"
 
           TEXT="تم التوقيع بنجاح 🚀
