@@ -1,30 +1,55 @@
 name: ZSign Worker
+
 on:
   workflow_dispatch:
     inputs:
       p12_path:
         required: true
+        type: string
       prov_path:
         required: true
+        type: string
       password:
         required: true
+        type: string
       chat_id:
         required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   sign:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup zsign
         run: |
-          sudo apt-get update && sudo apt-get install -y zip unzip curl libssl-dev g++
-          git clone https://github.com/zhlynn/zsign.git
-          cd zsign
-          g++ *.cpp common/*.cpp -lcrypto -lssl -O3 -o zsign
-          sudo mv zsign /usr/local/bin/
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            g++ \
+            make \
+            pkg-config \
+            libssl-dev \
+            zip \
+            unzip \
+            curl
+
+          rm -rf /tmp/zsign
+          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+
+          cd /tmp/zsign/build/linux
+          make clean
+          make
+
+          sudo install -m 755 zsign /usr/local/bin/zsign
+
+          zsign --version || zsign -h
 
       - name: Download Files
         env:
@@ -33,47 +58,133 @@ jobs:
           PROV_PATH: ${{ github.event.inputs.prov_path }}
           GAME_URL: "https://github.com/husszzzz/8ball-pool/releases/download/1.5/8.Ball.Pool_56.26.1_1787089904.ipa"
         run: |
-          curl -s -L "https://api.telegram.org/file/bot${BOT_TOKEN}/${P12_PATH}" -o cert.p12
-          curl -s -L "https://api.telegram.org/file/bot${BOT_TOKEN}/${PROV_PATH}" -o cert.mobileprovision
-          curl -s -L "$GAME_URL" -o game.ipa
+          set -e
+
+          curl -f -sSL \
+            "https://api.telegram.org/file/bot${BOT_TOKEN}/${P12_PATH}" \
+            -o cert.p12
+
+          curl -f -sSL \
+            "https://api.telegram.org/file/bot${BOT_TOKEN}/${PROV_PATH}" \
+            -o cert.mobileprovision
+
+          curl -f -sSL \
+            "$GAME_URL" \
+            -o game.ipa
+
+          test -s cert.p12
+          test -s cert.mobileprovision
+          test -s game.ipa
 
       - name: Sign IPA
         env:
           PASSWORD: ${{ github.event.inputs.password }}
         run: |
-          zsign -k cert.p12 -p "$PASSWORD" -m cert.mobileprovision -o signed.ipa game.ipa
+          set -e
+
+          zsign \
+            -k cert.p12 \
+            -p "$PASSWORD" \
+            -m cert.mobileprovision \
+            -o signed.ipa \
+            game.ipa
+
+          test -s signed.ipa
 
       - name: Upload to GitHub Releases
-        id: upload_ipa
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
+
           TAG="ota-${{ github.event.inputs.chat_id }}-$(date +%s)"
-          gh release create "$TAG" signed.ipa --title "Signed App" --notes "Signed via Hassany Bot"
-          echo "IPA_URL=https://github.com/${{ github.repository }}/releases/download/${TAG}/signed.ipa" >> $GITHUB_ENV
+
+          gh release create "$TAG" \
+            signed.ipa \
+            --title "Signed App" \
+            --notes "Signed via Hassany Bot"
+
+          IPA_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/signed.ipa"
+
+          echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
 
       - name: Generate OTA HTML and Plist
         env:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
         run: |
+          set -e
+
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
+
           git checkout -B gh-pages
-          
-          mkdir -p install_$CHAT_ID
-          
-          cat <<EOF > install_$CHAT_ID/manifest.plist
+
+          mkdir -p "install_${CHAT_ID}"
+
+          cat > "install_${CHAT_ID}/manifest.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${{ env.IPA_URL }}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>com.hassanystore.game</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>Signed by Hassany</string></dict></dict></array></dict></plist>
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>${IPA_URL}</string>
+                  </dict>
+                </array>
+
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key>
+                  <string>com.hassanystore.game</string>
+
+                  <key>bundle-version</key>
+                  <string>1.0</string>
+
+                  <key>kind</key>
+                  <string>software</string>
+
+                  <key>title</key>
+                  <string>Signed by Hassany</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
           EOF
-          
-          cat <<EOF > install_$CHAT_ID/index.html
-          <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>تثبيت اللعبة</title></head><body style="text-align: center; font-family: sans-serif; margin-top: 50px;"><h2>تم التوقيع بنجاح 🚀</h2><a href="itms-services://?action=download-manifest&url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_$CHAT_ID/manifest.plist" style="display:inline-block; padding: 15px 30px; background: #007aff; color: white; text-decoration: none; border-radius: 10px; font-size: 18px;">تثبيت الآن</a></body></html>
+
+          cat > "install_${CHAT_ID}/index.html" <<EOF
+          <!DOCTYPE html>
+          <html lang="ar" dir="rtl">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>تثبيت اللعبة</title>
+          </head>
+
+          <body style="text-align:center;font-family:sans-serif;margin-top:50px;">
+            <h2>تم التوقيع بنجاح 🚀</h2>
+
+            <a
+              href="itms-services://?action=download-manifest&url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/manifest.plist"
+              style="display:inline-block;padding:15px 30px;background:#007aff;color:white;text-decoration:none;border-radius:10px;font-size:18px;"
+            >
+              تثبيت الآن
+            </a>
+          </body>
+          </html>
           EOF
-          
-          git add install_$CHAT_ID/
-          git commit -m "Deploy OTA for $CHAT_ID"
+
+          git add "install_${CHAT_ID}/"
+
+          git commit -m "Deploy OTA for ${CHAT_ID}" || echo "No changes to commit"
+
           git push -f origin gh-pages
 
       - name: Send Telegram Message
@@ -82,5 +193,14 @@ jobs:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
         run: |
           INSTALL_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/index.html"
-          MSG="✅ **اكتمل التوقيع بنجاح!**%0A%0A🌐 **رابط التثبيت المباشر (OTA):**%0A$INSTALL_URL"
-          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${MSG}&parse_mode=Markdown"
+
+          TEXT="تم التوقيع بنجاح 🚀
+
+          رابط التثبيت:
+          ${INSTALL_URL}"
+
+          curl -f -sS \
+            -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${TEXT}"
