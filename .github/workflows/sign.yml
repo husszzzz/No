@@ -13,7 +13,7 @@ on:
 
 jobs:
   sign:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -22,8 +22,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y zip unzip curl libssl-dev cmake make g++
-          git clone https://github.com/zhlynn/zsign.git zsign_build
-          cd zsign_build
+          git clone https://github.com/zhlynn/zsign.git
+          cd zsign
           git checkout $(git rev-list -n 1 --before="2023-10-01" master)
           cmake .
           make
