@@ -86,5 +86,5 @@ jobs:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
         run: |
           INSTALL_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${CHAT_ID}/index.html"
-          MSG="✅ **اكتمل التوقيع بنجاح!**%0A%0A🌐 **رابط التثبيت المباشر (OTA):**%0A$INSTALL_URL"
-          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${MSG}&parse_mode=Markdown"
+          MSG="✅ اكتمل التوقيع بنجاح!%0A%0A🌐 رابط التثبيت المباشر (OTA):%0A$INSTALL_URL"
+          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${MSG}"
