@@ -13,19 +13,19 @@ on:
 
 jobs:
   sign:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Setup zsign (Stable Build)
+      - name: Setup zsign (Old Stable Version)
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip curl libssl-dev cmake g++
+          sudo apt-get install -y zip unzip curl libssl-dev cmake make g++
           git clone https://github.com/zhlynn/zsign.git zsign_build
           cd zsign_build
-          mkdir build && cd build
-          cmake ..
+          git checkout $(git rev-list -n 1 --before="2023-10-01" master)
+          cmake .
           make
           sudo cp zsign /usr/local/bin/
           sudo chmod +x /usr/local/bin/zsign
