@@ -179,7 +179,6 @@ jobs:
           </html>
           EOF_HTML
 
-          # الحفظ المباشر في الواجهة لكي يستلمه Vercel
           git config --global user.name "Hassany Bot"
           git config --global user.email "bot@hassany.com"
           git pull --rebase origin main || true
@@ -190,11 +189,18 @@ jobs:
           INSTALL_URL="https://${VERCEL_DOMAIN}/install_${UNIQUE_ID}/index.html"
           echo "INSTALL_URL=${INSTALL_URL}" >> $GITHUB_ENV
 
-      - name: Send Telegram Message
+      - name: Send Telegram Message & Trigger Vercel
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
+          VERCEL_WEBHOOK: "https://api.vercel.com/v1/integrations/deploy/prj_OYXxJqLu6BUUOuz81YYYSycW47YV/a2QANaDsZg"
         run: |
+          # إجبار فيرسل على التحديث فوراً
+          if [ "$VERCEL_WEBHOOK" != "ضع_رابط_الـ_HOOK_هنا" ]; then
+            curl -s -X POST "$VERCEL_WEBHOOK"
+          fi
+          
+          # إرسال الرسالة
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"✅ اكتمل التوقيع الاحترافي بنجاح!\n\n🌐 رابط التثبيت المباشر:\n${INSTALL_URL}\", \"disable_web_page_preview\": true}"
+            -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"✅ اكتمل التوقيع الاحترافي بنجاح!\n\n🌐 رابط التثبيت المباشر (يتغير تلقائياً):\n${INSTALL_URL}\", \"disable_web_page_preview\": true}"
