@@ -64,18 +64,15 @@ jobs:
           gh release create "$TAG" signed.ipa --title "Signed App" --notes "Signed via Hassany Bot"
           echo "IPA_URL=https://github.com/${{ github.repository }}/releases/download/${TAG}/signed.ipa" >> $GITHUB_ENV
 
-      - name: Generate VIP OTA Page & Root Index
+      - name: Generate VIP OTA Page in Isolated Folder
         env:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
           VERCEL_DOMAIN: "no-bznl.vercel.app"
         run: |
-          # فكرتك: إضافة ملف index.html رئيسي حتى فيرسل يتعرف على الموقع
-          echo "<!DOCTYPE html><html lang='ar'><head><meta charset='utf-8'><title>Hassany Server</title></head><body style='background:#0a0a0a;color:#fff;text-align:center;padding-top:100px;'><h1>Hassany VIP Server 🚀</h1><p>Server is running...</p></body></html>" > index.html
+          # وضعنا الملفات داخل مجلد OTA لعزلها عن ملفات البوت
+          mkdir -p OTA/install_${UNIQUE_ID}
           
-          mkdir -p install_${UNIQUE_ID}
-          
-          # إنشاء ملف Plist
-          cat <<EOF > install_${UNIQUE_ID}/manifest.plist
+          cat <<EOF > OTA/install_${UNIQUE_ID}/manifest.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -109,8 +106,7 @@ jobs:
           </plist>
           EOF
           
-          # تصميم الواجهة الاحترافي
-          cat << 'EOF_HTML' > install_${UNIQUE_ID}/index.html
+          cat << 'EOF_HTML' > OTA/install_${UNIQUE_ID}/index.html
           <!DOCTYPE html>
           <html lang="ar" dir="rtl">
           <head>
@@ -182,15 +178,13 @@ jobs:
           </html>
           EOF_HTML
 
-          # الرفع إلى المستودع
           git config --global user.name "Hassany Bot"
           git config --global user.email "bot@hassany.com"
           git pull --rebase origin main || true
-          git add index.html install_${UNIQUE_ID}/
+          git add OTA/
           git commit -m "Deploy VIP OTA for ${UNIQUE_ID}"
           git push origin HEAD:main
           
-          # تجهيز الرابط النهائي
           INSTALL_URL="https://${VERCEL_DOMAIN}/install_${UNIQUE_ID}/index.html"
           echo "INSTALL_URL=${INSTALL_URL}" >> $GITHUB_ENV
 
@@ -200,17 +194,13 @@ jobs:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
           VERCEL_WEBHOOK: "https://api.vercel.com/v1/integrations/deploy/prj_OYXxJqLu6BUUOuz81YYYSycW47YV/a2QANaDsZg"
         run: |
-          # 1. نعطي أمر لـ Vercel حتى يبدأ يحدث الموقع ويسحب الملفات الجديدة
-          if [ "$VERCEL_WEBHOOK" != "رابط_الهوك_مالتك_هنا" ]; then
+          if [ "$VERCEL_WEBHOOK" != "ضع_رابط_الهوك_مالتك_هنا" ]; then
             curl -s -X POST "$VERCEL_WEBHOOK"
-            echo "Vercel build triggered!"
           fi
           
-          # 2. خطوة السر: ننتظر 20 ثانية حتى فيرسل يكمل بناء الصفحة 
-          echo "Waiting 20 seconds for Vercel to build..."
+          echo "Waiting 20 seconds for Vercel..."
           sleep 20
           
-          # 3. بعد ما يجهز الموقع 100%، ندز الرسالة للبوت
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"✅ اكتمل التوقيع الاحترافي بنجاح!\n\n🌐 رابط التثبيت المباشر:\n${{ env.INSTALL_URL }}\", \"disable_web_page_preview\": true}"
