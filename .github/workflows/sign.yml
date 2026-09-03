@@ -13,16 +13,17 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   sign:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
 
       - name: Setup zsign (Old Stable Version)
         run: |
@@ -64,15 +65,14 @@ jobs:
           gh release create "$TAG" signed.ipa --title "Signed App" --notes "Signed via Hassany Bot"
           echo "IPA_URL=https://github.com/${{ github.repository }}/releases/download/${TAG}/signed.ipa" >> $GITHUB_ENV
 
-      - name: Generate VIP OTA Page and Push to Vercel
+      - name: Generate VIP OTA Page
         env:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
-          VERCEL_DOMAIN: "no-nine-ebon.vercel.app"
         run: |
-          mkdir -p install_${UNIQUE_ID}
+          mkdir -p public/install_${UNIQUE_ID}
           
           # إنشاء ملف Plist
-          cat <<EOF > install_${UNIQUE_ID}/manifest.plist
+          cat <<EOF > public/install_${UNIQUE_ID}/manifest.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -106,8 +106,8 @@ jobs:
           </plist>
           EOF
           
-          # إنشاء تصميم الواجهة الاحترافي (VIP Red & Black)
-          cat << 'EOF_HTML' > install_${UNIQUE_ID}/index.html
+          # تصميم الواجهة الاحترافي
+          cat << 'EOF_HTML' > public/install_${UNIQUE_ID}/index.html
           <!DOCTYPE html>
           <html lang="ar" dir="rtl">
           <head>
@@ -179,28 +179,27 @@ jobs:
           </html>
           EOF_HTML
 
-          git config --global user.name "Hassany Bot"
-          git config --global user.email "bot@hassany.com"
-          git pull --rebase origin main || true
-          git add install_${UNIQUE_ID}/
-          git commit -m "Deploy VIP OTA for ${UNIQUE_ID}"
-          git push origin HEAD:main
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './public'
 
-          INSTALL_URL="https://${VERCEL_DOMAIN}/install_${UNIQUE_ID}/index.html"
-          echo "INSTALL_URL=${INSTALL_URL}" >> $GITHUB_ENV
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
-      - name: Send Telegram Message & Trigger Vercel
+      - name: Mask URL and Send Message
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
-          VERCEL_WEBHOOK: "https://api.vercel.com/v1/integrations/deploy/prj_OYXxJqLu6BUUOuz81YYYSycW47YV/a2QANaDsZg"
         run: |
-          # إجبار فيرسل على التحديث فوراً
-          if [ "$VERCEL_WEBHOOK" != "ضع_رابط_الـ_HOOK_هنا" ]; then
-            curl -s -X POST "$VERCEL_WEBHOOK"
-          fi
+          # الرابط الأصلي
+          RAW_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${UNIQUE_ID}/index.html"
           
-          # إرسال الرسالة
+          # تحويل الرابط لرابط قصير مبهم لإخفاء اسم جيت هب
+          SHORT_URL=$(curl -s "https://tinyurl.com/api-create.php?url=${RAW_URL}")
+          
+          # إرسال الرسالة بالرابط المشفر
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"✅ اكتمل التوقيع الاحترافي بنجاح!\n\n🌐 رابط التثبيت المباشر (يتغير تلقائياً):\n${INSTALL_URL}\", \"disable_web_page_preview\": true}"
+            -d "{\"chat_id\": \"${CHAT_ID}\", \"text\": \"✅ اكتمل التوقيع الاحترافي بنجاح!\n\n🌐 رابط التثبيت المباشر:\n${SHORT_URL}\", \"disable_web_page_preview\": true}"
