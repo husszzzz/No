@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup zsign (Old Stable Version)
         run: |
@@ -68,10 +69,10 @@ jobs:
           CHAT_ID: ${{ github.event.inputs.chat_id }}
           VERCEL_DOMAIN: "no-nine-ebon.vercel.app"
         run: |
-          mkdir -p public/install_${UNIQUE_ID}
+          mkdir -p install_${UNIQUE_ID}
           
           # إنشاء ملف Plist
-          cat <<EOF > public/install_${UNIQUE_ID}/manifest.plist
+          cat <<EOF > install_${UNIQUE_ID}/manifest.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -106,7 +107,7 @@ jobs:
           EOF
           
           # إنشاء تصميم الواجهة الاحترافي (VIP Red & Black)
-          cat << 'EOF_HTML' > public/install_${UNIQUE_ID}/index.html
+          cat << 'EOF_HTML' > install_${UNIQUE_ID}/index.html
           <!DOCTYPE html>
           <html lang="ar" dir="rtl">
           <head>
@@ -274,9 +275,8 @@ jobs:
           # حفظ الملفات بالمستودع حتى يقرأها Vercel
           git config --global user.name "Hassany Bot"
           git config --global user.email "bot@hassany.com"
-          git fetch
           git checkout main || git checkout master
-          git add public/install_${UNIQUE_ID}/
+          git add install_${UNIQUE_ID}/
           git commit -m "Deploy VIP OTA for ${UNIQUE_ID}"
           git push origin HEAD
 
