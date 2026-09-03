@@ -196,8 +196,8 @@ jobs:
           # الرابط الأصلي
           RAW_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/install_${UNIQUE_ID}/index.html"
           
-          # تحويل الرابط لرابط قصير مبهم لإخفاء اسم جيت هب
-          SHORT_URL=$(curl -s "https://tinyurl.com/api-create.php?url=${RAW_URL}")
+          # تحويل الرابط باستخدام موقع is.gd لأن tinyurl محظور ببعض الشبكات
+          SHORT_URL=$(curl -s "https://is.gd/create.php?format=simple&url=${RAW_URL}")
           
           # إرسال الرسالة بالرابط المشفر
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
