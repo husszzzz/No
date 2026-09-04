@@ -1,48 +1,47 @@
-import os
-import requests
-from flask import Flask, request
 import telebot
-from telebot import types
+from flask import Flask, request
 
-# خلينا التوكن مباشرة بالكود حتى نلغي مشاكل فيرسل للأبد!
+# التوكن مالتك جاهز
 BOT_TOKEN = "7594385345:AAG4V4Nc9l-p-MsZam_L2U1HhllGajTnE40"
-ADMIN_ID = 6799794121
-
-bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
-# --- أوامر البوت الأساسية ---
+# لحفظ خطوات الاستلام
+user_steps = {}
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    text = "أهلاً بك في <b>Hassany Store</b> 👑\nالمتجر الأول لتوقيع التطبيقات 🔥"
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("توقيع تطبيق ✅", callback_data="sign"),
-        types.InlineKeyboardButton("متجر التطبيقات 📱", web_app=types.WebAppInfo("https://no-bznl.vercel.app"))
-    )
-    if message.from_user.id == ADMIN_ID:
-        markup.add(types.InlineKeyboardButton("لوحة التحكم ⚙️", callback_data="admin"))
+    user_id = message.chat.id
+    user_steps[user_id] = 'p12'
+    bot.reply_to(message, "أهلاً بك! 👋\nأرسل ملف الشهادة `.p12` أولاً:", parse_mode="Markdown")
+
+@bot.message_handler(content_types=['document', 'text'])
+def handle_files(message):
+    user_id = message.chat.id
+    if user_id not in user_steps:
+        return
     
-    bot.reply_to(message, text, reply_markup=markup)
+    step = user_steps[user_id]
+    
+    if step == 'p12' and message.document and message.document.file_name.endswith('.p12'):
+        user_steps[user_id] = 'prov'
+        bot.reply_to(message, "ممتاز! ✅\nالآن أرسل ملف `.mobileprovision`:")
+        
+    elif step == 'prov' and message.document and message.document.file_name.endswith('.mobileprovision'):
+        user_steps[user_id] = 'password'
+        bot.reply_to(message, "حلو! هسه أرسل باسوورد الشهادة:")
+        
+    elif step == 'password' and message.text:
+        bot.reply_to(message, "جاري التوقيع... انتظر ثواني ⏳")
+        del user_steps[user_id]
 
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    if call.data == "sign":
-        bot.answer_callback_query(call.id, "سيتم تفعيل التوقيع قريباً!", show_alert=True)
-    elif call.data == "admin":
-        bot.answer_callback_query(call.id, "مرحباً بك يا مدير", show_alert=True)
-
-# --- إعدادات الويب هوك (Vercel) ---
-@app.route('/api', methods=['POST', 'GET'])
-def webhook():
+# هذا هو الـ api اللي يستقبل الرسائل من فيرسل
+@app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
+@app.route('/<path:path>', methods=['POST', 'GET'])
+def webhook(path):
     if request.method == 'POST':
-        try:
-            json_string = request.get_data().decode('utf-8')
-            update = telebot.types.Update.de_json(json_string)
-            bot.process_new_updates([update])
-            return "OK", 200
-        except Exception as e:
-            print("Error:", e)
-            return "Error", 500
+        update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
+        bot.process_new_updates([update])
+        return "OK", 200
     else:
-        return "<h1>البوت شغال ومربوط بسيرفر فيرسل الأساسي 🚀</h1>", 200
+        return "Bot is Running!", 200
