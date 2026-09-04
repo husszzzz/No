@@ -1,47 +1,75 @@
-import telebot
-from flask import Flask, request
+import os
+import requests
+from flask import Flask, request, jsonify
 
-# التوكن مالتك جاهز
-BOT_TOKEN = "7594385345:AAG4V4Nc9l-p-MsZam_L2U1HhllGajTnE40"
-bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
+TELEGRAM_TOKEN = os.getenv("BOT_TOKEN")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") 
+REPO_OWNER = "husszzzz"
+REPO_NAME = "No"
+sessions = {}
 
-# لحفظ خطوات الاستلام
-user_steps = {}
+def send_message(chat_id, text):
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text})
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    user_id = message.chat.id
-    user_steps[user_id] = 'p12'
-    bot.reply_to(message, "أهلاً بك! 👋\nأرسل ملف الشهادة `.p12` أولاً:", parse_mode="Markdown")
+def get_file_path(file_id):
+    res = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
+    return res['result']['file_path']
 
-@bot.message_handler(content_types=['document', 'text'])
-def handle_files(message):
-    user_id = message.chat.id
-    if user_id not in user_steps:
-        return
-    
-    step = user_steps[user_id]
-    
-    if step == 'p12' and message.document and message.document.file_name.endswith('.p12'):
-        user_steps[user_id] = 'prov'
-        bot.reply_to(message, "ممتاز! ✅\nالآن أرسل ملف `.mobileprovision`:")
-        
-    elif step == 'prov' and message.document and message.document.file_name.endswith('.mobileprovision'):
-        user_steps[user_id] = 'password'
-        bot.reply_to(message, "حلو! هسه أرسل باسوورد الشهادة:")
-        
-    elif step == 'password' and message.text:
-        bot.reply_to(message, "جاري التوقيع... انتظر ثواني ⏳")
-        del user_steps[user_id]
+def trigger_github_action(p12_path, prov_path, password, chat_id):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/sign.yml/dispatches"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    data = {
+        "ref": "main",
+        "inputs": {
+            "p12_path": p12_path,
+            "prov_path": prov_path,
+            "password": password,
+            "chat_id": str(chat_id)
+        }
+    }
+    # هنا ضفنا كود كشف الأخطاء
+    res = requests.post(url, headers=headers, json=data)
+    if res.status_code != 204:
+        send_message(chat_id, f"❌ فشل تشغيل الأكشن في GitHub!\nرمز الخطأ: {res.status_code}\nالسبب: {res.text}")
 
-# هذا هو الـ api اللي يستقبل الرسائل من فيرسل
-@app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
-@app.route('/<path:path>', methods=['POST', 'GET'])
-def webhook(path):
-    if request.method == 'POST':
-        update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
-        bot.process_new_updates([update])
-        return "OK", 200
-    else:
-        return "Bot is Running!", 200
+@app.route('/api', methods=['POST', 'GET'])
+def webhook():
+    if request.method == 'GET':
+        return "Vercel Bot is Running!"
+
+    update = request.get_json()
+    if not update or "message" not in update:
+        return jsonify({"status": "ok"})
+
+    chat_id = update["message"]["chat"]["id"]
+    if chat_id not in sessions:
+        sessions[chat_id] = {}
+
+    if "text" in update["message"]:
+        text = update["message"]["text"]
+        if text == "/start":
+            sessions[chat_id] = {}
+            send_message(chat_id, "👋 أهلاً بك! أرسل ملف الشهادة `.p12` أولاً:")
+        elif "p12_path" in sessions[chat_id] and "prov_path" in sessions[chat_id] and "password" not in sessions[chat_id]:
+            sessions[chat_id]["password"] = text
+            send_message(chat_id, "⚙️ تم استلام البيانات! جاري إرسال الأمر لسيرفرات GitHub...")
+            trigger_github_action(sessions[chat_id]["p12_path"], sessions[chat_id]["prov_path"], text, chat_id)
+            sessions[chat_id] = {} 
+
+    elif "document" in update["message"]:
+        doc = update["message"]["document"]
+        file_name = doc.get("file_name", "")
+        file_id = doc["file_id"]
+
+        if file_name.endswith(".p12"):
+            sessions[chat_id]["p12_path"] = get_file_path(file_id)
+            send_message(chat_id, "✅ تم استلام الشهادة. أرسل الآن ملف `.mobileprovision`:")
+        elif file_name.endswith(".mobileprovision"):
+            sessions[chat_id]["prov_path"] = get_file_path(file_id)
+            send_message(chat_id, "🔐 أرسل كلمة مرور الشهادة:")
+
+    return jsonify({"status": "ok"})
