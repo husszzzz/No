@@ -1,13 +1,11 @@
 import os
-import json
 import requests
 from flask import Flask, request
 import telebot
 from telebot import types
 
-# التوكنات يسحبها من إعدادات Vercel
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+# خلينا التوكن مباشرة بالكود حتى نلغي مشاكل فيرسل للأبد!
+BOT_TOKEN = "7594385345:AAG4V4Nc9l-p-MsZam_L2U1HhllGajTnE40"
 ADMIN_ID = 6799794121
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
@@ -44,6 +42,7 @@ def webhook():
             bot.process_new_updates([update])
             return "OK", 200
         except Exception as e:
+            print("Error:", e)
             return "Error", 500
     else:
         return "<h1>البوت شغال ومربوط بسيرفر فيرسل الأساسي 🚀</h1>", 200
