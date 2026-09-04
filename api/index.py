@@ -12,7 +12,7 @@ from telebot import TeleBot, types
 # =======================================================
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-ADMIN_ID = 6799794121  # الأيدي مالتك اللي اله حق لوحة التحكم
+ADMIN_ID = 6799794121
 REPO_OWNER = "husszzzz"
 REPO_NAME = "No"
 
@@ -20,10 +20,11 @@ bot = TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
 app = Flask(__name__)
 
 # =======================================================
-# 2. نظام الرموز التعبيرية المتحركة (Custom Emojis)
+# 2. نظام الرموز التعبيرية (تم التعديل لتجنب حظر تليجرام)
 # =======================================================
 def custom_emoji(fallback, emoji_id):
-    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+    # تليجرام يمنع البوتات من استخدام الرموز المتحركة، لذلك نستخدم الرموز الأساسية
+    return fallback
 
 E_CROWN = custom_emoji("👑", "6008233706039284019")
 E_MONEY = custom_emoji("💰", "5891198677606732755")
