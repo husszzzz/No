@@ -71,7 +71,7 @@ class GitHubDatabase:
                 payload["sha"] = sha
             requests.put(self.url, headers=self.headers, json=payload)
         except Exception as e:
-            print(f"Error saving DB: {e}")
+            pass
 
 db_manager = GitHubDatabase()
 
@@ -119,7 +119,10 @@ def send_welcome(message):
     if user_id not in db["users"]:
         db["users"].append(user_id)
         db_manager.save(db, sha)
-        bot.send_message(ADMIN_ID, f"{E_BELL} <b>دخول عضو جديد!</b>\nالاسم: {message.from_user.first_name}\nالأيدي: <code>{user_id}</code>")
+        try:
+            bot.send_message(ADMIN_ID, f"{E_BELL} <b>دخول عضو جديد!</b>\nالاسم: {message.from_user.first_name}\nالأيدي: <code>{user_id}</code>")
+        except:
+            pass
 
     text = f"أهلاً بك في <b>Hassany Store</b> {E_CROWN}\n\nالمتجر الأول والحصري لتوقيع التطبيقات الاحترافية {E_FIRE}\nقم باختيار الخدمة المطلوبة من القائمة أدناه {E_DIAMOND}:"
     
@@ -314,7 +317,6 @@ def handle_user_input(message):
 # =======================================================
 # 8. إعدادات خادم Vercel (Flask Webhook - Catch All)
 # =======================================================
-# هذا التعديل يضمن أن فيرسل يلتقط الطلبات مهما كان مسارها
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
 @app.route('/<path:path>', methods=['POST', 'GET'])
 def webhook(path):
@@ -326,8 +328,10 @@ def webhook(path):
         except Exception as e:
             return "ERROR", 500
     else:
-        # هنا سحر الربط: بمجرد فتح الرابط، يربط التليجرام بفيرسل تلقائياً!
-        webhook_url = f"https://no-bznl.vercel.app/api"
+        current_url = request.base_url
+        if current_url.startswith("http://"):
+            current_url = current_url.replace("http://", "https://")
+            
         bot.remove_webhook()
-        bot.set_webhook(url=webhook_url)
-        return f"<h1>Hassany Store Bot is Running! 🚀</h1><p>Webhook connected to: {webhook_url}</p>", 200
+        bot.set_webhook(url=current_url)
+        return f"<h1>Hassany Store Bot is Ready! 🚀</h1><p>Webhook connected to: {current_url}</p>", 200
